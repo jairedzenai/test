@@ -1,0 +1,89 @@
+"""
+Auto-generated API test for {{ test_name }}
+Generated from JIRA: {{ jira_key }}
+Description: {{ description }}
+Generated on: {{ timestamp }}
+"""
+
+import pytest
+import requests
+import json
+from typing import Dict, Any
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class Test{{ test_class_name }}:
+    """Test class for {{ test_name }}"""
+    
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        """Setup test environment"""
+        self.base_url = "{{ base_url }}"
+        self.headers = {
+            "Content-Type": "application/json",
+            {% if auth_token -%}
+            "Authorization": "Bearer {{ auth_token }}",
+            {% endif -%}
+        }
+        self.timeout = {{ timeout | default(30) }}
+        
+    {% for test_case in test_cases %}
+    def test_{{ test_case.name | replace(' ', '_') | lower }}(self):
+        """
+        Test Case: {{ test_case.name }}
+        Description: {{ test_case.description }}
+        Expected Result: {{ test_case.expected_result }}
+        """
+        
+        # Test data
+        {% if test_case.request_data -%}
+        request_data = {{ test_case.request_data | tojson }}
+        {% else -%}
+        request_data = {}
+        {% endif -%}
+        
+        # Make API request
+        try:
+            response = requests.{{ test_case.method | lower }}(
+                url=f"{self.base_url}{{ test_case.endpoint }}",
+                {% if test_case.method.upper() in ['POST', 'PUT', 'PATCH'] -%}
+                json=request_data,
+                {% endif -%}
+                headers=self.headers,
+                timeout=self.timeout
+            )
+            
+            # Assertions
+            assert response.status_code == {{ test_case.expected_status_code | default(200) }}, \
+                f"Expected status code {{ test_case.expected_status_code | default(200) }}, got {response.status_code}"
+            
+            {% if test_case.expected_response_fields -%}
+            response_data = response.json()
+            {% for field in test_case.expected_response_fields -%}
+            assert "{{ field }}" in response_data, f"Field '{{ field }}' not found in response"
+            {% endfor -%}
+            {% endif -%}
+            
+            {% if test_case.assertions -%}
+            {% for assertion in test_case.assertions -%}
+            {{ assertion }}
+            {% endfor -%}
+            {% endif -%}
+            
+            logger.info(f"Test {{ test_case.name }} passed successfully")
+            
+        except requests.exceptions.RequestException as e:
+            pytest.fail(f"API request failed: {str(e)}")
+        except AssertionError as e:
+            logger.error(f"Test {{ test_case.name }} failed: {str(e)}")
+            raise
+        except Exception as e:
+            pytest.fail(f"Unexpected error in test: {str(e)}")
+    
+    {% endfor %}
+    
+    def teardown_method(self):
+        """Cleanup after each test method"""
+        pass

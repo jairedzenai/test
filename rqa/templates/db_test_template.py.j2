@@ -1,0 +1,181 @@
+"""
+Auto-generated Database test for {{ test_name }}
+Generated from JIRA: {{ jira_key }}
+Description: {{ description }}
+Generated on: {{ timestamp }}
+"""
+
+import pytest
+{% if db_type == 'postgresql' or db_type == 'mysql' -%}
+import psycopg2
+import pymysql
+from sqlalchemy import create_engine, text
+{% elif db_type == 'mongodb' -%}
+from pymongo import MongoClient
+{% endif -%}
+import logging
+from typing import Dict, Any, List
+
+logger = logging.getLogger(__name__)
+
+
+class Test{{ test_class_name }}:
+    """Database Test class for {{ test_name }}"""
+    
+    @pytest.fixture(autouse=True)
+    def setup_and_teardown(self):
+        """Setup and teardown database connection"""
+        
+        {% if db_type == 'postgresql' -%}
+        # PostgreSQL connection
+        self.connection_string = "postgresql://{{ username }}:{{ password }}@{{ host }}:{{ port }}/{{ database }}"
+        self.engine = create_engine(self.connection_string)
+        self.connection = self.engine.connect()
+        {% elif db_type == 'mysql' -%}
+        # MySQL connection
+        self.connection_string = "mysql+pymysql://{{ username }}:{{ password }}@{{ host }}:{{ port }}/{{ database }}"
+        self.engine = create_engine(self.connection_string)
+        self.connection = self.engine.connect()
+        {% elif db_type == 'mongodb' -%}
+        # MongoDB connection
+        self.client = MongoClient("mongodb://{{ username }}:{{ password }}@{{ host }}:{{ port }}/")
+        self.db = self.client["{{ database }}"]
+        {% endif -%}
+        
+        yield
+        
+        # Teardown
+        {% if db_type in ['postgresql', 'mysql'] -%}
+        self.connection.close()
+        self.engine.dispose()
+        {% elif db_type == 'mongodb' -%}
+        self.client.close()
+        {% endif -%}
+    
+    {% if db_type in ['postgresql', 'mysql'] %}
+    def execute_query(self, query: str, params: Dict = None) -> List[Dict]:
+        """Execute SQL query and return results"""
+        try:
+            result = self.connection.execute(text(query), params or {})
+            if result.returns_rows:
+                columns = result.keys()
+                return [dict(zip(columns, row)) for row in result.fetchall()]
+            else:
+                return []
+        except Exception as e:
+            logger.error(f"Query execution failed: {str(e)}")
+            raise
+    {% elif db_type == 'mongodb' %}
+    def execute_find(self, collection_name: str, query: Dict, projection: Dict = None) -> List[Dict]:
+        """Execute MongoDB find query"""
+        try:
+            collection = self.db[collection_name]
+            results = list(collection.find(query, projection))
+            return results
+        except Exception as e:
+            logger.error(f"MongoDB query execution failed: {str(e)}")
+            raise
+    
+    def execute_aggregate(self, collection_name: str, pipeline: List[Dict]) -> List[Dict]:
+        """Execute MongoDB aggregation pipeline"""
+        try:
+            collection = self.db[collection_name]
+            results = list(collection.aggregate(pipeline))
+            return results
+        except Exception as e:
+            logger.error(f"MongoDB aggregation failed: {str(e)}")
+            raise
+    {% endif %}
+    
+    {% for test_case in test_cases %}
+    def test_{{ test_case.name | replace(' ', '_') | lower }}(self):
+        """
+        Test Case: {{ test_case.name }}
+        Description: {{ test_case.description }}
+        Expected Result: {{ test_case.expected_result }}
+        """
+        
+        try:
+            {% if db_type in ['postgresql', 'mysql'] -%}
+            # Execute SQL query
+            {% if test_case.setup_queries -%}
+            # Setup data
+            {% for setup_query in test_case.setup_queries -%}
+            self.execute_query("""{{ setup_query }}""")
+            {% endfor -%}
+            {% endif -%}
+            
+            # Main test query
+            result = self.execute_query("""{{ test_case.query }}""", {{ test_case.query_params | default({}) | tojson }})
+            
+            {% elif db_type == 'mongodb' -%}
+            # Execute MongoDB operation
+            {% if test_case.setup_data -%}
+            # Setup data
+            {% for collection, data in test_case.setup_data.items() -%}
+            self.db["{{ collection }}"].insert_many({{ data | tojson }})
+            {% endfor -%}
+            {% endif -%}
+            
+            {% if test_case.operation_type == 'find' -%}
+            result = self.execute_find(
+                "{{ test_case.collection }}",
+                {{ test_case.query | tojson }},
+                {{ test_case.projection | default({}) | tojson }}
+            )
+            {% elif test_case.operation_type == 'aggregate' -%}
+            result = self.execute_aggregate(
+                "{{ test_case.collection }}",
+                {{ test_case.pipeline | tojson }}
+            )
+            {% endif -%}
+            {% endif -%}
+            
+            # Assertions
+            {% if test_case.expected_row_count is defined -%}
+            assert len(result) == {{ test_case.expected_row_count }}, \
+                f"Expected {{ test_case.expected_row_count }} rows, got {len(result)}"
+            {% endif -%}
+            
+            {% if test_case.expected_fields -%}
+            if result:
+                {% for field in test_case.expected_fields -%}
+                assert "{{ field }}" in result[0], f"Field '{{ field }}' not found in result"
+                {% endfor -%}
+            {% endif -%}
+            
+            {% if test_case.expected_values -%}
+            if result:
+                {% for field, value in test_case.expected_values.items() -%}
+                assert result[0]["{{ field }}"] == {{ value | tojson }}, \
+                    f"Expected {{ field }} to be {{ value }}, got {result[0]['{{ field }}']}"
+                {% endfor -%}
+            {% endif -%}
+            
+            {% if test_case.custom_assertions -%}
+            {% for assertion in test_case.custom_assertions -%}
+            {{ assertion }}
+            {% endfor -%}
+            {% endif -%}
+            
+            logger.info(f"Database Test {{ test_case.name }} passed successfully")
+            
+        except Exception as e:
+            logger.error(f"Database Test {{ test_case.name }} failed: {str(e)}")
+            raise
+        finally:
+            # Cleanup
+            {% if test_case.cleanup_queries -%}
+            {% for cleanup_query in test_case.cleanup_queries -%}
+            try:
+                {% if db_type in ['postgresql', 'mysql'] -%}
+                self.execute_query("""{{ cleanup_query }}""")
+                {% elif db_type == 'mongodb' -%}
+                self.db["{{ test_case.collection }}"].delete_many({{ cleanup_query | tojson }})
+                {% endif -%}
+            except Exception as cleanup_error:
+                logger.warning(f"Cleanup failed: {str(cleanup_error)}")
+            {% endfor -%}
+            {% endif -%}
+    
+    {% endfor %}

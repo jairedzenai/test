@@ -1,0 +1,46 @@
+# RQA Tool Configuration
+jira:
+  server: "https://your-jira-instance.atlassian.net"
+  username: "your-username"
+  password: "your-api-token"
+  project_key: "PROJ"
+  max_results: 100
+  
+zephyr:
+  server: "https://your-zephyr-instance.com"
+  username: "your-username"
+  password: "your-api-token"
+  project_id: "12345"
+  cycle_name: "Automated Test Cycle"
+  
+database:
+  type: "postgresql"  # postgresql, mysql, mongodb
+  host: "localhost"
+  port: 5432
+  database: "test_db"
+  username: "db_user"
+  password: "db_password"
+  
+ui_testing:
+  browser: "chrome"  # chrome, firefox, edge
+  headless: false
+  timeout: 30
+  screenshot_on_failure: true
+  
+api_testing:
+  base_url: "https://api.example.com"
+  timeout: 30
+  verify_ssl: true
+  
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/rqa.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+templates:
+  output_path: "tests/generated"
+  test_prefix: "test_"
+  
+reports:
+  output_path: "reports"
+  format: "html"  # html, json, xml

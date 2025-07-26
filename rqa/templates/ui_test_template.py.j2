@@ -1,0 +1,122 @@
+"""
+Auto-generated UI test for {{ test_name }}
+Generated from JIRA: {{ jira_key }}
+Description: {{ description }}
+Generated on: {{ timestamp }}
+"""
+
+import pytest
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+import logging
+import os
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+
+class Test{{ test_class_name }}:
+    """UI Test class for {{ test_name }}"""
+    
+    @pytest.fixture(autouse=True)
+    def setup_and_teardown(self):
+        """Setup and teardown for each test"""
+        
+        # Setup WebDriver
+        chrome_options = Options()
+        {% if headless -%}
+        chrome_options.add_argument("--headless")
+        {% endif -%}
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--window-size=1920,1080")
+        
+        self.driver = webdriver.Chrome(options=chrome_options)
+        self.driver.implicitly_wait({{ timeout | default(10) }})
+        self.wait = WebDriverWait(self.driver, {{ timeout | default(10) }})
+        self.base_url = "{{ base_url }}"
+        
+        yield
+        
+        # Teardown
+        self.driver.quit()
+    
+    def take_screenshot(self, test_name: str):
+        """Take screenshot on failure"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        screenshot_path = f"logs/screenshots/{test_name}_{timestamp}.png"
+        os.makedirs(os.path.dirname(screenshot_path), exist_ok=True)
+        self.driver.save_screenshot(screenshot_path)
+        logger.info(f"Screenshot saved: {screenshot_path}")
+    
+    {% for test_case in test_cases %}
+    def test_{{ test_case.name | replace(' ', '_') | lower }}(self):
+        """
+        Test Case: {{ test_case.name }}
+        Description: {{ test_case.description }}
+        Expected Result: {{ test_case.expected_result }}
+        """
+        
+        try:
+            # Navigate to page
+            {% if test_case.url -%}
+            self.driver.get("{{ test_case.url }}")
+            {% else -%}
+            self.driver.get(f"{self.base_url}{{ test_case.page_path | default('/') }}")
+            {% endif -%}
+            
+            # Wait for page to load
+            self.wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+            
+            {% for step in test_case.steps %}
+            # Step {{ loop.index }}: {{ step.description }}
+            {% if step.action == 'click' -%}
+            element = self.wait.until(EC.element_to_be_clickable((By.{{ step.locator_type }}, "{{ step.locator }}")))
+            element.click()
+            {% elif step.action == 'type' -%}
+            element = self.wait.until(EC.presence_of_element_located((By.{{ step.locator_type }}, "{{ step.locator }}")))
+            element.clear()
+            element.send_keys("{{ step.text }}")
+            {% elif step.action == 'select' -%}
+            from selenium.webdriver.support.ui import Select
+            element = self.wait.until(EC.presence_of_element_located((By.{{ step.locator_type }}, "{{ step.locator }}")))
+            select = Select(element)
+            select.select_by_visible_text("{{ step.option }}")
+            {% elif step.action == 'wait' -%}
+            self.wait.until(EC.presence_of_element_located((By.{{ step.locator_type }}, "{{ step.locator }}")))
+            {% elif step.action == 'assert_text' -%}
+            element = self.wait.until(EC.presence_of_element_located((By.{{ step.locator_type }}, "{{ step.locator }}")))
+            assert "{{ step.expected_text }}" in element.text, f"Expected text '{{ step.expected_text }}' not found. Actual: {element.text}"
+            {% elif step.action == 'assert_element_present' -%}
+            assert self.driver.find_element(By.{{ step.locator_type }}, "{{ step.locator }}"), "Element not found"
+            {% endif -%}
+            
+            {% endfor %}
+            
+            # Final validation
+            {% if test_case.final_assertion -%}
+            {{ test_case.final_assertion }}
+            {% endif -%}
+            
+            logger.info(f"UI Test {{ test_case.name }} passed successfully")
+            
+        except TimeoutException as e:
+            self.take_screenshot("{{ test_case.name | replace(' ', '_') | lower }}")
+            pytest.fail(f"Timeout waiting for element: {str(e)}")
+        except NoSuchElementException as e:
+            self.take_screenshot("{{ test_case.name | replace(' ', '_') | lower }}")
+            pytest.fail(f"Element not found: {str(e)}")
+        except AssertionError as e:
+            self.take_screenshot("{{ test_case.name | replace(' ', '_') | lower }}")
+            logger.error(f"UI Test {{ test_case.name }} failed: {str(e)}")
+            raise
+        except Exception as e:
+            self.take_screenshot("{{ test_case.name | replace(' ', '_') | lower }}")
+            pytest.fail(f"Unexpected error in UI test: {str(e)}")
+    
+    {% endfor %}
